@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving, TemplateHaskell, NamedFieldPuns, RecordWildCards, FlexibleInstances #-}
 {-# OPTIONS_GHC -v0 #-}
-module MoeDict where
+module Text.MoeDict where
 import Data.String
 import Data.Text (Text)
 import Data.Text.Encoding as E
@@ -13,7 +13,7 @@ import Control.Applicative
 import Data.HashMap.Strict ((!))
 import qualified Data.ByteString.Lazy as B
 import Data.Map.Strict (Map)
-import Data.List (sortBy, groupBy)
+import Data.List (sortBy)
 import Data.Function (on)
 
 type Str = Text
@@ -28,11 +28,12 @@ data Radical = Radical
 newtype Example = Example Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
 newtype Title = Title { titleText :: Str } deriving (Show, IsString, FromJSON, ToJSON, Ord, Eq)
 newtype Link = Link Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
-newtype Count = Count Int deriving (Show, Ord, Eq, FromJSON, ToJSON)
-data PartOfSpeech = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note deriving (Show, Eq, Ord)
+newtype Count = Count Int deriving (Show, Ord, Eq, FromJSON, ToJSON, Enum)
+data Part = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note deriving (Show, Eq, Ord)
+data POS = POS { label :: Text, part :: Part } deriving (Show, Eq, Ord)
 
-instance FromJSON PartOfSpeech where
-    parseJSON (String s) = maybe (fail $ show s) pure $ lookup s
+instance FromJSON POS where
+    parseJSON (String s) = maybe (fail $ show s) (pure . POS s) $ lookup s
         [ ("介", Preposition), ("代", Pronoun), ("副", Adverb)
         , ("助", Particle), ("動", Verb), ("名", Noun)
         , ("形", Adjective), ("歎", Exclamation), ("狀", Onomatopoeia)
@@ -50,7 +51,8 @@ data Heteronym = Heteronym
     , definitions     :: [Definition]
     } deriving (Show, Eq, Ord)
 data Definition = Definition
-    { def         :: Text
+    { definition  :: Text
+    , pos         :: Maybe POS
     , examples    :: [Example]
     , quotes      :: [Quote]
     , links       :: [Link]
@@ -75,7 +77,8 @@ instance FromJSON Entry where
         return Entry{..}
 instance FromJSON Definition where
     parseJSON (Object o) = do
-        def       <- o .: "def"
+        definition <- o .: "def"
+        pos       <- o .:? "type"
         examples  <- maybeList <$> o .:? "example"
         quotes    <- maybeList <$> o .:? "quote"
         links     <- maybeList <$> o .:? "link"

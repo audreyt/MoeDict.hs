@@ -15,7 +15,7 @@ library
     extensions: OverloadedStrings, GeneralizedNewtypeDeriving, TemplateHaskell
                 NamedFieldPuns, RecordWildCards
     hs-source-dirs: .
-    exposed-modules: MoeDict
+    exposed-modules: Text.MoeDict
 
 source-repository head
     type: git
