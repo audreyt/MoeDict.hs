@@ -1,28 +1,33 @@
 {-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving, TemplateHaskell, NamedFieldPuns, RecordWildCards #-}
 module MoeDict where
 import Data.String
-import Data.Text
+import Data.Text (Text)
 import Data.Text.Encoding as E
+import qualified Data.Text as T
+import qualified Data.Map.Strict as Map
 import Data.Aeson
 import Data.Aeson.TH
 import Control.Applicative
 import Data.HashMap.Strict ((!))
 import qualified Data.ByteString.Lazy as B
+import Data.Map.Strict (Map)
+import Data.List (sortBy, groupBy)
+import Data.Function (on)
 
 type Str = Text
-data Pronounciation = Pronounciation { bopomofo :: Str, bopomofo2 :: Str, pinyin :: Str } deriving (Show)
+data Pronounciation = Pronounciation { bopomofo :: Str, bopomofo2 :: Str, pinyin :: Str } deriving (Show, Eq, Ord)
 $(deriveJSON defaultOptions ''Pronounciation)
-newtype Quote = Quote Str deriving (Show, IsString, FromJSON, ToJSON)
+newtype Quote = Quote Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
 data Radical = Radical
     { letter :: Char
     , strokeCount :: Count
     , nonRadicalStrokeCount :: Count
     } deriving (Show, Ord, Eq)
-newtype Example = Example Str deriving (Show, IsString, FromJSON, ToJSON)
-newtype Title = Title Str deriving (Show, IsString, FromJSON, ToJSON)
-newtype Link = Link Str deriving (Show, IsString, FromJSON, ToJSON)
+newtype Example = Example Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
+newtype Title = Title { titleText :: Str } deriving (Show, IsString, FromJSON, ToJSON, Ord, Eq)
+newtype Link = Link Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
 newtype Count = Count Int deriving (Show, Ord, Eq, FromJSON, ToJSON)
-data PartOfSpeech = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note deriving (Show)
+data PartOfSpeech = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note deriving (Show, Eq, Ord)
 
 instance FromJSON PartOfSpeech where
     parseJSON (String s) = maybe (fail $ show s) pure $ lookup s
@@ -37,11 +42,11 @@ data Entry = Entry
     { title      :: Title
     , radical    :: Maybe Radical
     , heteronyms :: [Heteronym]
-    } deriving (Show)
+    } deriving (Show, Eq, Ord)
 data Heteronym = Heteronym
     { pronounciation  :: Pronounciation
     , definitions     :: [Definition]
-    } deriving (Show)
+    } deriving (Show, Eq, Ord)
 data Definition = Definition
     { def         :: Text
     , examples    :: [Example]
@@ -49,7 +54,7 @@ data Definition = Definition
     , links       :: [Link]
     , antonyms    :: [Title]
     , synonyms    :: [Title]
-    } deriving (Show)
+    } deriving (Show, Eq, Ord)
 instance FromJSON Entry where
     parseJSON (Object o) = do
         title       <- o .: "title"
@@ -75,7 +80,7 @@ instance FromJSON Definition where
         maybeList Nothing = []
         maybeList (Just xs) = xs
         maybeTitles Nothing = []
-        maybeTitles (Just xs) = Title <$> (splitOn "," xs)
+        maybeTitles (Just xs) = Title <$> (T.splitOn "," xs)
 instance ToJSON Definition where
     toJSON Definition {..} = error "NYI"
     
@@ -89,6 +94,52 @@ instance ToJSON Heteronym where
         [ ("pronounciation" .= pronounciation)
         , ("definitions" .= definitions)
         ]
-main = do
-    decoded <- eitherDecode <$> B.readFile "sample.json"
-    print (decoded :: Either String [Entry])
+
+parseMoeDictFile :: FilePath -> IO [Entry]
+parseMoeDictFile fn = do
+    decoded <- eitherDecode <$> B.readFile fn
+    either fail return decoded
+
+---
+type RadicalLetter = Char
+type PinYin = T.Text
+data HeadWord = HeadWord
+    { headChar    :: !Char
+    , headSound   :: !PinYin
+    } deriving (Show, Eq, Ord)
+type EntryMap = Map HeadWord [Entry]
+data Cluster = Cluster
+    { radicalLetter  :: RadicalLetter
+    , headWord  :: !HeadWord
+    , clusterEntries :: [Entry]
+    } deriving (Show)
+entriesToMap :: [Entry] -> Map RadicalLetter EntryMap
+entriesToMap entries = Map.fromList $ ms
+    where
+    entriesSplitted = concatMap splitHeteronym entries
+    entriesByHeteronym = [(entryHead e, [e]) | e <- entriesSplitted]
+    splitHeteronym :: Entry -> [Entry]
+    splitHeteronym Entry{..} = [ Entry{title, radical, heteronyms=[h]} | h <- heteronyms ]
+    cs :: [Cluster]
+    cs = map es2cluster $ Map.toList $ Map.fromListWith (++) entriesByHeteronym
+    ms = map cs2map $ Map.elems $ Map.fromListWith (++) [ (radicalLetter c, [c]) | c <- cs ]
+    cs2map :: [Cluster] -> (RadicalLetter, EntryMap)
+    cs2map clusters@(Cluster{radicalLetter}:_) = (radicalLetter, Map.fromList $ map (\x -> (headWord x, clusterEntries x)) clusters)
+    cs2map _ = error "impossible"
+    es2cluster :: (HeadWord, [Entry]) -> Cluster
+    es2cluster (headWord, es) =
+        case es' of
+            Entry{radical=Just Radical{letter}}:_ ->
+                Cluster { radicalLetter = letter, headWord, clusterEntries = es' }
+            _ -> Cluster { radicalLetter = '?', headWord, clusterEntries = es' }
+        where
+        es' = sortBy (compare `on` title) es
+    entryHead :: Entry -> HeadWord
+    entryHead Entry{..} = HeadWord {..}
+        where
+        headChar = T.head (titleText title)
+        headSound =
+            T.dropWhileEnd (== 'r') $ -- 兒化韻
+            T.takeWhile (/= ' ') $
+            T.dropWhile (> '\255') $
+            pinyin (pronounciation (head heteronyms))
