@@ -7,7 +7,7 @@ maintainer: audreyt@audreyt.org
 homepage: https://github.com/audreyt/MoeDict.hs
 synopsis: Utilities working with MoeDict.tw JSON dataset 
 description: Utilities working with MoeDict.tw JSON dataset 
-category: Data
+category: Text
 build-type: Simple
 
 library
