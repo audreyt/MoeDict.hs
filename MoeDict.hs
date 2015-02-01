@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving, TemplateHaskell, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving, TemplateHaskell, NamedFieldPuns, RecordWildCards, FlexibleInstances #-}
+{-# OPTIONS_GHC -v0 #-}
 module MoeDict where
 import Data.String
 import Data.Text (Text)
@@ -7,6 +8,7 @@ import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
 import Data.Aeson
 import Data.Aeson.TH
+import Data.Maybe (catMaybes)
 import Control.Applicative
 import Data.HashMap.Strict ((!))
 import qualified Data.ByteString.Lazy as B
@@ -55,10 +57,14 @@ data Definition = Definition
     , antonyms    :: [Title]
     , synonyms    :: [Title]
     } deriving (Show, Eq, Ord)
+instance FromJSON (Maybe Entry) where
+    parseJSON j = Just <$> parseJSON j <|> return Nothing
+instance FromJSON (Maybe Heteronym) where
+    parseJSON j = Just <$> parseJSON j <|> return Nothing
 instance FromJSON Entry where
     parseJSON (Object o) = do
         title       <- o .: "title"
-        heteronyms  <- o .: "heteronyms"
+        heteronyms  <- catMaybes <$> o .: "heteronyms"
         rv          <- o .:? "radical"
         radical     <- case rv of
             Nothing -> return Nothing
@@ -98,7 +104,7 @@ instance ToJSON Heteronym where
 parseMoeDictFile :: FilePath -> IO [Entry]
 parseMoeDictFile fn = do
     decoded <- eitherDecode <$> B.readFile fn
-    either fail return decoded
+    either fail (return . catMaybes) decoded
 
 ---
 type RadicalLetter = Char
@@ -118,8 +124,6 @@ entriesToMap entries = Map.fromList $ ms
     where
     entriesSplitted = concatMap splitHeteronym entries
     entriesByHeteronym = [(entryHead e, [e]) | e <- entriesSplitted]
-    splitHeteronym :: Entry -> [Entry]
-    splitHeteronym Entry{..} = [ Entry{title, radical, heteronyms=[h]} | h <- heteronyms ]
     cs :: [Cluster]
     cs = map es2cluster $ Map.toList $ Map.fromListWith (++) entriesByHeteronym
     ms = map cs2map $ Map.elems $ Map.fromListWith (++) [ (radicalLetter c, [c]) | c <- cs ]
@@ -134,12 +138,16 @@ entriesToMap entries = Map.fromList $ ms
             _ -> Cluster { radicalLetter = '?', headWord, clusterEntries = es' }
         where
         es' = sortBy (compare `on` title) es
-    entryHead :: Entry -> HeadWord
-    entryHead Entry{..} = HeadWord {..}
-        where
-        headChar = T.head (titleText title)
-        headSound =
-            T.dropWhileEnd (== 'r') $ -- 兒化韻
-            T.takeWhile (/= ' ') $
-            T.dropWhile (> '\255') $
-            pinyin (pronounciation (head heteronyms))
+
+splitHeteronym :: Entry -> [Entry]
+splitHeteronym Entry{..} = [ Entry{title, radical, heteronyms=[h]} | h <- heteronyms ]
+
+entryHead :: Entry -> HeadWord
+entryHead Entry{..} = HeadWord {..}
+    where
+    headChar = T.head (titleText title)
+    headSound =
+        T.dropWhileEnd (== 'r') $ -- 兒化韻
+        T.takeWhile (/= ' ') $
+        T.dropWhile (> '\255') $
+        pinyin (pronounciation (head heteronyms))

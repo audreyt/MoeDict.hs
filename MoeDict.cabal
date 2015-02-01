@@ -11,7 +11,7 @@ category: Data
 build-type: Simple
 
 library
-    build-depends: base >= 2 && < 5, aeson, text, unordered-containers, bytestring
+    build-depends: base >= 2 && < 5, aeson, text, unordered-containers, bytestring, base16-bytestring
     extensions: OverloadedStrings, GeneralizedNewtypeDeriving, TemplateHaskell
                 NamedFieldPuns, RecordWildCards
     hs-source-dirs: .
