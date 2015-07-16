@@ -33,7 +33,7 @@ newtype Count = Count Int deriving (Show, Ord, Eq, FromJSON, ToJSON, Enum)
 data Part = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note
     | Slang | Loanword | Derivative deriving (Show, Eq, Ord)
 data POS = POS { label :: Text, part :: Part } deriving (Show, Eq, Ord)
-data Ref = Ref { refLabel :: Text, refText :: Text, refRelationship :: Relationship } deriving (Show, Eq, Ord)
+data Ref = Ref { refLabel :: Text, refRelationship :: Relationship, refText :: Text } deriving (Show, Eq, Ord)
 data Relationship = Composition | Synonym | Antonym deriving (Show, Eq, Ord)
 
 instance FromJSON POS where
@@ -46,7 +46,7 @@ instance FromJSON POS where
         ]
     parseJSON x = fail $ show x
 
-instance FromJSON Ref where
+instance FromJSON (Text -> Ref) where
     parseJSON (String s) = maybe (fail $ show s) (pure . Ref s) $ lookup s
         [ ("孳", Composition), ("同", Synonym), ("反", Antonym)
         ]
@@ -79,7 +79,7 @@ instance FromJSON (Maybe Heteronym) where
 instance FromJSON Entry where
     parseJSON (Object o) = do
         title       <- o .: "title"
-        referencea  <- maybeList <$> o .:? "references"
+        references  <- maybeList <$> o .:? "references"
         heteronyms  <- catMaybes <$> o .: "heteronyms"
         rv          <- o .:? "radical"
         radical     <- case rv of
@@ -90,6 +90,12 @@ instance FromJSON Entry where
                 shapeDescription        <- o .:? "shape_description"
                 return Radical{..}
         return Entry{..}
+instance FromJSON Ref where
+    parseJSON (Object o) = do
+        ref <- o .: "type"
+        txt <- o .: "text"
+        return $ ref (txt :: Text)
+
 instance FromJSON Definition where
     parseJSON (Object o) = do
         definition <- o .: "def"
@@ -101,10 +107,12 @@ instance FromJSON Definition where
         synonyms  <- maybeTitles <$> o .:? "synonyms"
         return Definition {..}
         where
-        maybeList Nothing = []
-        maybeList (Just xs) = xs
         maybeTitles Nothing = []
         maybeTitles (Just xs) = Title <$> (T.splitOn "," xs)
+
+maybeList Nothing = []
+maybeList (Just xs) = xs
+
 instance ToJSON Definition where
     toJSON Definition {..} = error "NYI"
     
@@ -158,7 +166,7 @@ entriesToMap entries = Map.fromList $ ms
         es' = sortBy (compare `on` title) es
 
 splitHeteronym :: Entry -> [Entry]
-splitHeteronym Entry{..} = [ Entry{title, radical, heteronyms=[h]} | h <- heteronyms ]
+splitHeteronym Entry{..} = [ Entry{title, radical, references, heteronyms=[h]} | h <- heteronyms ]
 
 entryHead :: Entry -> HeadWord
 entryHead Entry{..} = HeadWord {..}
