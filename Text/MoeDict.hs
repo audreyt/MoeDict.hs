@@ -31,10 +31,14 @@ newtype Title = Title { titleText :: Str } deriving (Show, IsString, FromJSON, T
 newtype Link = Link Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
 newtype Count = Count Int deriving (Show, Ord, Eq, FromJSON, ToJSON, Enum)
 data Part = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note
-    | Slang | Loanword | Derivative deriving (Show, Eq, Ord)
+    | Slang | Loanword | Derivative
+    | Composition | Synonym | Antonym
+    deriving (Show, Eq, Ord)
 data POS = POS { label :: Text, part :: Part } deriving (Show, Eq, Ord)
-data Ref = Ref { refLabel :: Text, refRelationship :: Relationship, refText :: Text } deriving (Show, Eq, Ord)
-data Relationship = Composition | Synonym | Antonym deriving (Show, Eq, Ord)
+data Reference = Reference
+    { refType  :: Maybe POS
+    , refText  :: Text
+    } deriving (Show, Eq, Ord)
 
 instance FromJSON POS where
     parseJSON (String s) = maybe (fail $ show s) (pure . POS s) $ lookup s
@@ -43,21 +47,16 @@ instance FromJSON POS where
         , ("形", Adjective), ("歎", Exclamation), ("狀", Onomatopoeia)
         , ("綴", Affix), ("連", Conjunction), ("辨似", Note)
         , ("俚", Slang), ("外", Loanword), ("衍", Derivative)
+        , ("孳", Composition), ("同", Synonym), ("反", Antonym)
         ]
     parseJSON x = fail $ show x
-
-instance FromJSON (Text -> Ref) where
-    parseJSON (String s) = maybe (fail $ show s) (pure . Ref s) $ lookup s
-        [ ("孳", Composition), ("同", Synonym), ("反", Antonym)
-        ]
-    parseJSON x = fail $ show x
-
 
 data Entry = Entry
     { title      :: Title
     , radical    :: Maybe Radical
     , heteronyms :: [Heteronym]
-    , references :: [Ref]
+    , references :: [Reference]
+    -- TODO: Translations?
     } deriving (Show, Eq, Ord)
 data Heteronym = Heteronym
     { pronounciation  :: Pronounciation
@@ -90,11 +89,11 @@ instance FromJSON Entry where
                 shapeDescription        <- o .:? "shape_description"
                 return Radical{..}
         return Entry{..}
-instance FromJSON Ref where
+instance FromJSON Reference where
     parseJSON (Object o) = do
-        ref <- o .: "type"
+        pos <- o .:? "type"
         txt <- o .: "text"
-        return $ ref (txt :: Text)
+        return $ Reference pos txt
 
 instance FromJSON Definition where
     parseJSON (Object o) = do
