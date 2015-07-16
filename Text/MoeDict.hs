@@ -24,13 +24,17 @@ data Radical = Radical
     { letter :: Char
     , strokeCount :: Count
     , nonRadicalStrokeCount :: Count
+    , shapeDescription :: Maybe Text -- "解形"
     } deriving (Show, Ord, Eq)
 newtype Example = Example Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
 newtype Title = Title { titleText :: Str } deriving (Show, IsString, FromJSON, ToJSON, Ord, Eq)
 newtype Link = Link Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
 newtype Count = Count Int deriving (Show, Ord, Eq, FromJSON, ToJSON, Enum)
-data Part = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note deriving (Show, Eq, Ord)
+data Part = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note
+    | Slang | Loanword | Derivative deriving (Show, Eq, Ord)
 data POS = POS { label :: Text, part :: Part } deriving (Show, Eq, Ord)
+data Ref = Ref { refLabel :: Text, refText :: Text, refRelationship :: Relationship } deriving (Show, Eq, Ord)
+data Relationship = Composition | Synonym | Antonym deriving (Show, Eq, Ord)
 
 instance FromJSON POS where
     parseJSON (String s) = maybe (fail $ show s) (pure . POS s) $ lookup s
@@ -38,13 +42,22 @@ instance FromJSON POS where
         , ("助", Particle), ("動", Verb), ("名", Noun)
         , ("形", Adjective), ("歎", Exclamation), ("狀", Onomatopoeia)
         , ("綴", Affix), ("連", Conjunction), ("辨似", Note)
+        , ("俚", Slang), ("外", Loanword), ("衍", Derivative)
         ]
     parseJSON x = fail $ show x
+
+instance FromJSON Ref where
+    parseJSON (String s) = maybe (fail $ show s) (pure . Ref s) $ lookup s
+        [ ("孳", Composition), ("同", Synonym), ("反", Antonym)
+        ]
+    parseJSON x = fail $ show x
+
 
 data Entry = Entry
     { title      :: Title
     , radical    :: Maybe Radical
     , heteronyms :: [Heteronym]
+    , references :: [Ref]
     } deriving (Show, Eq, Ord)
 data Heteronym = Heteronym
     { pronounciation  :: Pronounciation
@@ -66,6 +79,7 @@ instance FromJSON (Maybe Heteronym) where
 instance FromJSON Entry where
     parseJSON (Object o) = do
         title       <- o .: "title"
+        referencea  <- maybeList <$> o .:? "references"
         heteronyms  <- catMaybes <$> o .: "heteronyms"
         rv          <- o .:? "radical"
         radical     <- case rv of
@@ -73,6 +87,7 @@ instance FromJSON Entry where
             Just letter -> Just <$> do
                 strokeCount             <- o .: "stroke_count"
                 nonRadicalStrokeCount   <- o .: "non_radical_stroke_count"
+                shapeDescription        <- o .:? "shape_description"
                 return Radical{..}
         return Entry{..}
 instance FromJSON Definition where
