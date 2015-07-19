@@ -29,7 +29,11 @@ newtype Example = Example Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Or
 newtype Title = Title { titleText :: Str } deriving (Show, IsString, FromJSON, ToJSON, Ord, Eq)
 newtype Link = Link Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
 newtype Count = Count Int deriving (Show, Ord, Eq, FromJSON, ToJSON, Enum)
-data Part = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note deriving (Show, Eq, Ord)
+data Part = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective | Exclamation | Onomatopoeia | Affix | Conjunction | Note
+    | Slang | Loanword | Derivative
+    | Composition | Synonym | Antonym
+    | Cantonese | PuTongHua | None
+ deriving (Show, Eq, Ord)
 data POS = POS { label :: Text, part :: Part } deriving (Show, Eq, Ord)
 
 instance FromJSON POS where
@@ -38,6 +42,10 @@ instance FromJSON POS where
         , ("助", Particle), ("動", Verb), ("名", Noun)
         , ("形", Adjective), ("歎", Exclamation), ("狀", Onomatopoeia)
         , ("綴", Affix), ("連", Conjunction), ("辨似", Note)
+        , ("俚", Slang), ("外", Loanword), ("衍", Derivative)
+        , ("孳", Composition), ("同", Synonym), ("反", Antonym)
+        , ("廣東話", Cantonese), ("普通話", PuTongHua)
+	, ("", None)
         ]
     parseJSON x = fail $ show x
 
