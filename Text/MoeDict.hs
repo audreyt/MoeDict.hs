@@ -17,8 +17,8 @@ import Data.List (sortBy)
 import Data.Function (on)
 
 type Str = Text
-data Pronounciation = Pronounciation { bopomofo :: Str, bopomofo2 :: Str, pinyin :: Str } deriving (Show, Eq, Ord)
-$(deriveJSON defaultOptions ''Pronounciation)
+data Pronunciation = Pronunciation { bopomofo :: Str, bopomofo2 :: Str, pinyin :: Str } deriving (Show, Eq, Ord)
+$(deriveJSON defaultOptions ''Pronunciation)
 newtype Quote = Quote Str deriving (Show, IsString, FromJSON, ToJSON, Eq, Ord)
 data Radical = Radical
     { letter :: Char
@@ -62,8 +62,8 @@ data Entry = Entry
     -- TODO: Translations?
     } deriving (Show, Eq, Ord)
 data Heteronym = Heteronym
-    { pronounciation  :: Pronounciation
-    , definitions     :: [Definition]
+    { pronunciation :: Pronunciation
+    , definitions   :: [Definition]
     } deriving (Show, Eq, Ord)
 data Definition = Definition
     { definition  :: Text
@@ -120,13 +120,13 @@ instance ToJSON Definition where
     
 instance FromJSON Heteronym where
     parseJSON json@(Object o) = do
-        pronounciation <- parseJSON json
-        definitions    <- o .: "definitions"
-        return $ Heteronym { pronounciation, definitions }
+        pronunciation <- parseJSON json
+        definitions   <- o .: "definitions"
+        return $ Heteronym { pronunciation, definitions }
 instance ToJSON Heteronym where
     toJSON Heteronym {..} = object
-        [ ("pronounciation" .= pronounciation)
-        , ("definitions" .= definitions)
+        [ ("pronunciation" .= pronunciation)
+        , ("definitions"   .= definitions)
         ]
 
 parseMoeDictFile :: FilePath -> IO [Entry]
@@ -178,4 +178,4 @@ entryHead Entry{..} = HeadWord {..}
         T.dropWhileEnd (== 'r') $ -- 兒化韻
         T.takeWhile (/= ' ') $
         T.dropWhile (> '\255') $
-        pinyin (pronounciation (head heteronyms))
+        pinyin (pronunciation (head heteronyms))
