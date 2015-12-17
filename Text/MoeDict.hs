@@ -37,7 +37,7 @@ data Part = Preposition | Pronoun | Adverb | Particle | Verb | Noun | Adjective 
     deriving (Show, Eq, Ord)
 data POS = POS { label :: Text, part :: Part } deriving (Show, Eq, Ord)
 data Reference = Reference
-    { refType  :: Maybe POS
+    { refType  :: Text
     , refText  :: Text
     } deriving (Show, Eq, Ord)
 
@@ -94,8 +94,8 @@ instance FromJSON Entry where
         return Entry{..}
 instance FromJSON Reference where
     parseJSON (Object o) = do
-        pos <- o .:? "type"
-        txt <- o .: "text"
+        pos <- o .: "type"
+        txt <- o .: "def"
         return $ Reference pos txt
 
 instance FromJSON Definition where
